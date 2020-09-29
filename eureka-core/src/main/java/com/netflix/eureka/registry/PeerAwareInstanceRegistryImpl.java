@@ -403,11 +403,22 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      */
     @Override
     public void register(final InstanceInfo info, final boolean isReplication) {
+        /**
+         * DurationInSecs 多长时间服务端检测一次客户端是否还在发送心跳，默认时间是90s
+         *     "lease.renewalInterval"; 用于客户端，多长时间发送一次心跳
+         *     "lease.duration"; 配置在客户端，用于服务端，服务端检测客户端多长时间没有发送心跳
+         */
         int leaseDuration = Lease.DEFAULT_DURATION_IN_SECS;
         if (info.getLeaseInfo() != null && info.getLeaseInfo().getDurationInSecs() > 0) {
             leaseDuration = info.getLeaseInfo().getDurationInSecs();
         }
+        /**
+         * 服务端处理注册信息
+         */
         super.register(info, leaseDuration, isReplication);
+        /**
+         * 向其它eureka 节点同步注册信息
+         */
         replicateToPeers(Action.Register, info.getAppName(), info.getId(), info, null, isReplication);
     }
 

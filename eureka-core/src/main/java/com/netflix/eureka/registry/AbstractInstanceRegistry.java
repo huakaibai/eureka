@@ -191,11 +191,28 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      */
     public void register(InstanceInfo registrant, int leaseDuration, boolean isReplication) {
         try {
+            // 一个读写锁
             read.lock();
+            /**
+             * 注册表的数据结构
+             *  ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry
+             * {
+             *     "serviceA":{
+             *         "0001":instanceInfo,
+             *         "0002":instanceInfo
+             *     },
+             *     "serviceB":{
+             *         "001":instanceInfo,
+             *         "002"instanceInfo,
+             *         "002"instanceInfo
+             *     }
+             * }
+             */
             Map<String, Lease<InstanceInfo>> gMap = registry.get(registrant.getAppName());
             REGISTER.increment(isReplication);
             if (gMap == null) {
                 final ConcurrentHashMap<String, Lease<InstanceInfo>> gNewMap = new ConcurrentHashMap<String, Lease<InstanceInfo>>();
+                // 根据服务名将，id:lease 放入注册表中
                 gMap = registry.putIfAbsent(registrant.getAppName(), gNewMap);
                 if (gMap == null) {
                     gMap = gNewMap;
@@ -230,10 +247,12 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 }
                 logger.debug("No previous lease information found; it is new registration");
             }
+            // 生成租约信息
             Lease<InstanceInfo> lease = new Lease<InstanceInfo>(registrant, leaseDuration);
             if (existingLease != null) {
                 lease.setServiceUpTimestamp(existingLease.getServiceUpTimestamp());
             }
+            // 将租约信息存入map中
             gMap.put(registrant.getId(), lease);
             synchronized (recentRegisteredQueue) {
                 recentRegisteredQueue.add(new Pair<Long, String>(
@@ -249,6 +268,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                     overriddenInstanceStatusMap.put(registrant.getId(), registrant.getOverriddenStatus());
                 }
             }
+            // 设置注册客户端相关状态
             InstanceStatus overriddenStatusFromMap = overriddenInstanceStatusMap.get(registrant.getId());
             if (overriddenStatusFromMap != null) {
                 logger.info("Storing overridden status {} from map", overriddenStatusFromMap);
@@ -264,8 +284,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 lease.serviceUp();
             }
             registrant.setActionType(ActionType.ADDED);
+            // 添加最近
             recentlyChangedQueue.add(new RecentlyChangedItem(lease));
             registrant.setLastUpdatedTimestamp();
+            // 缓存失效
             invalidateCache(registrant.getAppName(), registrant.getVIPAddress(), registrant.getSecureVipAddress());
             logger.info("Registered instance {}/{} with status {} (replication={})",
                     registrant.getAppName(), registrant.getId(), registrant.getStatus(), isReplication);

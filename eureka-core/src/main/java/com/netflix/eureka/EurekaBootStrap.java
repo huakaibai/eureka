@@ -157,18 +157,20 @@ public class EurekaBootStrap implements ServletContextListener {
         ServerCodecs serverCodecs = new DefaultServerCodecs(eurekaServerConfig);
 
         ApplicationInfoManager applicationInfoManager = null;
-
+        // 第二步 创建eureka client
         if (eurekaClient == null) {
-            //  第二部构建instanceConfig
+            // 构建instanceConfig
             EurekaInstanceConfig instanceConfig = isCloud(ConfigurationManager.getDeploymentContext())
                     ? new CloudInstanceConfig()
                     : new MyDataCenterInstanceConfig();
-            // 第三步 构建ApplicationInfoManager
+            //  构建ApplicationInfoManager
             applicationInfoManager = new ApplicationInfoManager(
                     // 构建 InstanceInfo 这里使用构造者模式，构造InstanceInfo
                     instanceConfig, new EurekaConfigBasedInstanceInfoProvider(instanceConfig).get());
-            // 第四步 EurekaClientConfig
+            // 初始化 EurekaClientConfig
             EurekaClientConfig eurekaClientConfig = new DefaultEurekaClientConfig();
+
+            // 根据applicationInfoManager eurekaClientConfig 创建Eureka client
             eurekaClient = new DiscoveryClient(applicationInfoManager, eurekaClientConfig);
         } else {
             applicationInfoManager = eurekaClient.getApplicationInfoManager();
@@ -177,6 +179,7 @@ public class EurekaBootStrap implements ServletContextListener {
         /**
          * 这块或许可以使用策略模式+工厂模式
          */
+        // 第三步 构建集群实列注册表
         PeerAwareInstanceRegistry registry;
         if (isAws(applicationInfoManager.getInfo())) {
             registry = new AwsInstanceRegistry(
@@ -196,7 +199,8 @@ public class EurekaBootStrap implements ServletContextListener {
                     eurekaClient
             );
         }
-        // 大概应该是eureka集群
+        // 大概应该是eureka集群 猜测
+        // 第四步 构建eureka 集群
         PeerEurekaNodes peerEurekaNodes = getPeerEurekaNodes(
                 registry,
                 eurekaServerConfig,
@@ -204,7 +208,8 @@ public class EurekaBootStrap implements ServletContextListener {
                 serverCodecs,
                 applicationInfoManager
         );
-
+        // 构造eureka server 上下文
+        // 第五步 eureka server 上下文初始化
         serverContext = new DefaultEurekaServerContext(
                 eurekaServerConfig,
                 serverCodecs,
@@ -212,17 +217,19 @@ public class EurekaBootStrap implements ServletContextListener {
                 peerEurekaNodes,
                 applicationInfoManager
         );
-
+        // 将 server context  注入到EurekaServerContextHolder中，非di(依赖注入)的情况下使用，类似于springContext
         EurekaServerContextHolder.initialize(serverContext);
-
+        // 上下文初始化
         serverContext.initialize();
         logger.info("Initialized server context");
 
         // Copy registry from neighboring eureka node
+        // 第六步 从相邻节点拷贝注册信息表
         int registryCount = registry.syncUp();
         registry.openForTraffic(applicationInfoManager, registryCount);
 
         // Register all monitoring statistics.
+        // 第七步 注册监控统计
         EurekaMonitors.registerAllStats();
     }
     

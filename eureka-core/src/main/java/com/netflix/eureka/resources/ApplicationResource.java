@@ -181,7 +181,9 @@ public class ApplicationResource {
                 }
             }
         }
-
+        /**
+         * 发起注册 isReplication：是eureka server node 发起的注册请求吗？
+         */
         registry.register(info, "true".equals(isReplication));
         return Response.status(204).build();  // 204 to be backwards compatible
     }

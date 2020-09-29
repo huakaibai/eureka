@@ -41,9 +41,9 @@ public class ApplicationResourceTest extends AbstractTester {
 
         applicationResource = new ApplicationResource(testApplication.getName(), serverContext.getServerConfig(), serverContext.getRegistry());
 
-        for (InstanceInfo instanceInfo : testApplication.getInstances()) {
+       /* for (InstanceInfo instanceInfo : testApplication.getInstances()) {
             registry.register(instanceInfo, false);
-        }
+        }*/
     }
 
     @Test

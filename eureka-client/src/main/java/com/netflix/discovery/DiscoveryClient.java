@@ -82,6 +82,7 @@ import com.netflix.servo.annotations.DataSourceType;
 import com.netflix.servo.monitor.Counter;
 import com.netflix.servo.monitor.Monitors;
 import com.netflix.servo.monitor.Stopwatch;
+import sun.plugin2.main.server.HeartbeatThread;
 
 /**
  * The class that is instrumental for interactions with <tt>Eureka Server</tt>.
@@ -300,6 +301,7 @@ public class DiscoveryClient implements EurekaClient {
                     Provider<BackupRegistry> backupRegistryProvider) {
         // 开始创建真正的discoveryclient,一个eurekaserver 会把自己当作一个client
         if (args != null) {
+            // args 应该是null
             this.healthCheckHandlerProvider = args.healthCheckHandlerProvider;
             this.healthCheckCallbackProvider = args.healthCheckCallbackProvider;
             this.eventListeners.addAll(args.getEventListeners());
@@ -311,10 +313,12 @@ public class DiscoveryClient implements EurekaClient {
         }
         
         this.applicationInfoManager = applicationInfoManager;
+        // 向eureka server 注册的就是InstanceInfo
         InstanceInfo myInfo = applicationInfoManager.getInfo();
 
         clientConfig = config;
         staticClientConfig = clientConfig;
+        // 网络传输组件配置
         transportConfig = config.getTransportConfig();
         instanceInfo = myInfo;
         if (myInfo != null) {
@@ -354,6 +358,10 @@ public class DiscoveryClient implements EurekaClient {
         } else {
             this.heartbeatStalenessMonitor = ThresholdLevelsMetric.NO_OP_METRIC;
         }
+
+        /**
+         * 按常人的设计，应该在这里，或者在eureka client 启动完成后，向server 发起注册流程
+         */
 
         logger.info("Initializing Eureka in region {}", clientConfig.getRegion());
 
@@ -432,7 +440,7 @@ public class DiscoveryClient implements EurekaClient {
         // 初始化调度任务
         initScheduledTasks();
 
-        try {
+        try {// 注册监控
             Monitors.registerObject(this);
         } catch (Throwable e) {
             logger.warn("Cannot register timers", e);
@@ -442,7 +450,7 @@ public class DiscoveryClient implements EurekaClient {
         // to work with DI'd DiscoveryClient
         DiscoveryManager.getInstance().setDiscoveryClient(this);
         DiscoveryManager.getInstance().setEurekaClientConfig(config);
-
+    // 客户端启动完成
         initTimestampMs = System.currentTimeMillis();
         logger.info("Discovery Client initialized at timestamp {} with initial instances count: {}",
                 initTimestampMs, this.getApplications().size());
@@ -817,6 +825,10 @@ public class DiscoveryClient implements EurekaClient {
         logger.info(PREFIX + appPathIdentifier + ": registering service...");
         EurekaHttpResponse<Void> httpResponse;
         try {
+            // 调用 AbstractJersey2EurekaHttpClient 向服务端发送接口调用
+            /**
+             * 配置eureka 的地址 eureka.serviceUrl.default http://localhost:8080/v2/apps/ServiceA
+             */
             httpResponse = eurekaTransport.registrationClient.register(instanceInfo);
         } catch (Exception e) {
             logger.warn("{} - registration failed {}", PREFIX + appPathIdentifier, e.getMessage(), e);
@@ -1250,6 +1262,9 @@ public class DiscoveryClient implements EurekaClient {
     private void initScheduledTasks() {
         if (clientConfig.shouldFetchRegistry()) {
             // registry cache refresh timer
+            /**
+             * 获取client 向server 抓取注册表的间隔 client.refresh.interval 配置
+             */
             int registryFetchIntervalSeconds = clientConfig.getRegistryFetchIntervalSeconds();
             int expBackOffBound = clientConfig.getCacheRefreshExecutorExponentialBackOffBound();
             scheduler.schedule(
@@ -1266,6 +1281,10 @@ public class DiscoveryClient implements EurekaClient {
         }
 
         if (clientConfig.shouldRegisterWithEureka()) {
+            /**
+             * 配置客户端多长时间向eureka server 发送心跳，这里主要使用调度线程池的调度时间发起调用 从租约中获取，默认是30s
+             * 配置的是lease.renewalInterval
+             */
             int renewalIntervalInSecs = instanceInfo.getLeaseInfo().getRenewalIntervalInSecs();
             int expBackOffBound = clientConfig.getHeartbeatExecutorExponentialBackOffBound();
             logger.info("Starting heartbeat executor: " + "renew interval is: " + renewalIntervalInSecs);
@@ -1284,6 +1303,9 @@ public class DiscoveryClient implements EurekaClient {
                     renewalIntervalInSecs, TimeUnit.SECONDS);
 
             // InstanceInfo replicator
+            /**
+             * 实列复制，其实就是向eureka server 发起注册，获取这个名字有歧义，是否应该叫做InstanceInfoRegistry
+             */
             instanceInfoReplicator = new InstanceInfoReplicator(
                     this,
                     instanceInfo,
@@ -1308,11 +1330,14 @@ public class DiscoveryClient implements EurekaClient {
                     instanceInfoReplicator.onDemandUpdate();
                 }
             };
-
+            // 注册状态改变监听器
             if (clientConfig.shouldOnDemandUpdateStatusChange()) {
                 applicationInfoManager.registerStatusChangeListener(statusChangeListener);
             }
-
+            // 现在才开始向server 端发起注册
+            /**
+             * 配置 多少 s 后发起 注册  appinfo.initial.replicate.time
+             */
             instanceInfoReplicator.start(clientConfig.getInitialInstanceInfoReplicationIntervalSeconds());
         } else {
             logger.info("Not registering with Eureka server per configuration");
@@ -1381,6 +1406,9 @@ public class DiscoveryClient implements EurekaClient {
      * isDirty flag on the instanceInfo is set to true
      */
     void refreshInstanceInfo() {
+        /**
+         * 从配置文件中读取数据，查看数据是否发生变化，发生变换则进行更新
+         */
         applicationInfoManager.refreshDataCenterInfoIfRequired();
         applicationInfoManager.refreshLeaseInfoIfRequired();
 
