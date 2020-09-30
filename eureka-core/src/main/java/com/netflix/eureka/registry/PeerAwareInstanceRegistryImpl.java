@@ -237,6 +237,8 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     public void openForTraffic(ApplicationInfoManager applicationInfoManager, int count) {
         // Renewals happen every 30 seconds and for a minute it should be a factor of 2.
         this.expectedNumberOfRenewsPerMin = count * 2;
+        // 期待的每分钟收到的心跳数据为当前实列数量 * 2；因为30s客户端发起一笔心跳，1分钟内，发起两笔注册，所以会乘以2
+        // 有一个问题就是，假设我修改客户端发送心跳的调度时间，不是30s发送一笔心跳，而是每10s发送一笔心跳，这个计算逻辑就出问题了。
         this.numberOfRenewsPerMinThreshold =
                 (int) (this.expectedNumberOfRenewsPerMin * serverConfig.getRenewalPercentThreshold());
         logger.info("Got " + count + " instances from neighboring DS node");
@@ -376,6 +378,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     public boolean cancel(final String appName, final String id,
                           final boolean isReplication) {
         if (super.cancel(appName, id, isReplication)) {
+            // 通知集群节点客户端下线的通知
             replicateToPeers(Action.Cancel, appName, id, null, null, isReplication);
             synchronized (lock) {
                 if (this.expectedNumberOfRenewsPerMin > 0) {
@@ -430,6 +433,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      */
     public boolean renew(final String appName, final String id, final boolean isReplication) {
         if (super.renew(appName, id, isReplication)) {
+            // 同步心跳结果给集群节点
             replicateToPeers(Action.Heartbeat, appName, id, null, null, isReplication);
             return true;
         }
@@ -489,10 +493,15 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
 
     @Override
     public boolean isLeaseExpirationEnabled() {
+
         if (!isSelfPreservationModeEnabled()) {
+            // 如果关闭了自我保护机制，则可以随意摘除故障实列
             // The self preservation mode is disabled, hence allowing the instances to expire.
             return true;
         }
+        // numberOfRenewsPerMinThreshold 期望的每分钟会有多少心跳次数
+        // getNumOfRenewsInLastMin() 上一分钟发生的心跳次数 > 期望心跳次数  则可以任意摘除实列，否则说明当前eureka server可能处理网络故障模式
+        // ，不会随意摘除故障实列，而是按一定比列随机摘除实列
         return numberOfRenewsPerMinThreshold > 0 && getNumOfRenewsInLastMin() > numberOfRenewsPerMinThreshold;
     }
 

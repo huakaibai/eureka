@@ -153,6 +153,7 @@ public class ApplicationsResource {
                     .header(HEADER_CONTENT_TYPE, returnMediaType)
                     .build();
         } else {
+            // responseCache.get(cacheKey) 调用缓存读取全量数据
             response = Response.ok(responseCache.get(cacheKey))
                     .build();
         }

@@ -88,6 +88,7 @@ public class InstanceResource {
     }
 
     /**
+     * 接收客户端心跳请求
      * A put request for renewing lease from a client instance.
      *
      * @param isReplication
@@ -109,8 +110,10 @@ public class InstanceResource {
             @QueryParam("status") String status,
             @QueryParam("lastDirtyTimestamp") String lastDirtyTimestamp) {
         boolean isFromReplicaNode = "true".equals(isReplication);
+        // 开始处理心跳
         boolean isSuccess = registry.renew(app.getName(), id, isFromReplicaNode);
 
+        // 如果发现客户端在服务端没有注册，返回404给客户端，要求客户端重新注册
         // Not found in the registry, immediately ask for a register
         if (!isSuccess) {
             logger.warn("Not Found (Renew): {} - {}", app.getName(), id);
@@ -268,6 +271,7 @@ public class InstanceResource {
     }
 
     /**
+     * 服务端处理客户端取消请求的处理
      * Handles cancellation of leases for this particular instance.
      *
      * @param isReplication

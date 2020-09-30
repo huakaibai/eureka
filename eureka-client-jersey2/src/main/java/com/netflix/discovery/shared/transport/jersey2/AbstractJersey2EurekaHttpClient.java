@@ -249,6 +249,13 @@ public abstract class AbstractJersey2EurekaHttpClient implements EurekaHttpClien
         }
     }
 
+    /**
+     * 调用服务端 获取全量注册表数据
+     * url： http://localhost:8080/v2/apps/
+     * @param urlPath
+     * @param regions
+     * @return
+     */
     private EurekaHttpResponse<Applications> getApplicationsInternal(String urlPath, String[] regions) {
         Response response = null;
         try {

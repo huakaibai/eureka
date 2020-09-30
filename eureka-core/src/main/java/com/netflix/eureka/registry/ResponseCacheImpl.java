@@ -140,6 +140,7 @@ public class ResponseCacheImpl implements ResponseCache {
                                 }
                             }
                         })
+                        // 初始化时加载缓存,在缓存失效后会,根据key自动重新加载缓存
                         .build(new CacheLoader<Key, Value>() {
                             @Override
                             public Value load(Key key) throws Exception {
@@ -151,7 +152,7 @@ public class ResponseCacheImpl implements ResponseCache {
                                 return value;
                             }
                         });
-
+        // 只读缓存和读写缓存进行同步，默认配置30s
         if (shouldUseReadOnlyResponseCache) {
             timer.schedule(getCacheUpdateTask(),
                     new Date(((System.currentTimeMillis() / responseCacheUpdateIntervalMs) * responseCacheUpdateIntervalMs)
@@ -171,15 +172,20 @@ public class ResponseCacheImpl implements ResponseCache {
             @Override
             public void run() {
                 logger.debug("Updating the client cache from response cache");
+                // 获取所有的key集合
+                // 有几个疑问？1： 如果读写缓存中数据比只读缓存中的数据多怎么办呢？ TODO
+                //2
                 for (Key key : readOnlyCacheMap.keySet()) {
                     if (logger.isDebugEnabled()) {
                         Object[] args = {key.getEntityType(), key.getName(), key.getVersion(), key.getType()};
                         logger.debug("Updating the client cache from response cache for key : {} {} {} {}", args);
                     }
                     try {
+                        // 分别从读写缓存和只读缓存中根据key获取数据
                         CurrentRequestVersion.set(key.getVersion());
                         Value cacheValue = readWriteCacheMap.get(key);
                         Value currentCacheValue = readOnlyCacheMap.get(key);
+                        // 比较两个集合
                         if (cacheValue != currentCacheValue) {
                             readOnlyCacheMap.put(key, cacheValue);
                         }
@@ -209,6 +215,7 @@ public class ResponseCacheImpl implements ResponseCache {
 
     @VisibleForTesting
     String get(final Key key, boolean useReadOnlyCache) {
+        // 默认使用只读缓存
         Value payload = getValue(key, useReadOnlyCache);
         if (payload == null || payload.getPayload().equals(EMPTY_PAYLOAD)) {
             return null;
@@ -270,7 +277,7 @@ public class ResponseCacheImpl implements ResponseCache {
         for (Key key : keys) {
             logger.debug("Invalidating the response cache key : {} {} {} {}, {}",
                     key.getEntityType(), key.getName(), key.getVersion(), key.getType(), key.getEurekaAccept());
-
+            // 调用guava 过期缓存
             readWriteCacheMap.invalidate(key);
             Collection<Key> keysWithRegions = regionSpecificKeys.get(key);
             if (null != keysWithRegions && !keysWithRegions.isEmpty()) {
@@ -345,10 +352,12 @@ public class ResponseCacheImpl implements ResponseCache {
         Value payload = null;
         try {
             if (useReadOnlyCache) {
+                // x先从只读缓存获取数据，
                 final Value currentPayload = readOnlyCacheMap.get(key);
                 if (currentPayload != null) {
                     payload = currentPayload;
                 } else {
+                    // 只读缓存没有获取到数据，则从读写缓存获取数据，同时将数据放入只读缓存
                     payload = readWriteCacheMap.get(key);
                     readOnlyCacheMap.put(key, payload);
                 }
@@ -365,6 +374,7 @@ public class ResponseCacheImpl implements ResponseCache {
      * Generate pay load with both JSON and XML formats for all applications.
      */
     private String getPayLoad(Key key, Applications apps) {
+        //serverCodecs json解析器吧类似于
         EncoderWrapper encoderWrapper = serverCodecs.getEncoder(key.getType(), key.getEurekaAccept());
         String result;
         try {
@@ -410,12 +420,14 @@ public class ResponseCacheImpl implements ResponseCache {
                     if (ALL_APPS.equals(key.getName())) {
                         if (isRemoteRegionRequested) {
                             tracer = serializeAllAppsWithRemoteRegionTimer.start();
+                            // 调用注册接口获取全部的缓存
                             payload = getPayLoad(key, registry.getApplicationsFromMultipleRegions(key.getRegions()));
                         } else {
                             tracer = serializeAllAppsTimer.start();
                             payload = getPayLoad(key, registry.getApplications());
                         }
                     } else if (ALL_APPS_DELTA.equals(key.getName())) {
+
                         if (isRemoteRegionRequested) {
                             tracer = serializeDeltaAppsWithRemoteRegionTimer.start();
                             versionDeltaWithRegions.incrementAndGet();

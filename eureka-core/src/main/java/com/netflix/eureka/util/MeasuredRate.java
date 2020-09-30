@@ -29,7 +29,9 @@ import org.slf4j.LoggerFactory;
  */
 public class MeasuredRate {
     private static final Logger logger = LoggerFactory.getLogger(MeasuredRate.class);
+    // 上一分钟每s接收到的心跳次数
     private final AtomicLong lastBucket = new AtomicLong(0);
+    // 当前分钟meis接收到的心跳次数
     private final AtomicLong currentBucket = new AtomicLong(0);
 
     private final long sampleInterval;
@@ -48,6 +50,7 @@ public class MeasuredRate {
 
     public synchronized void start() {
         if (!isActive) {
+            // 每一分钟调度一次，也可以同于3分钟内的收到心跳次数，10分钟内收到的心跳次数，值得学习
             timer.schedule(new TimerTask() {
 
                 @Override
